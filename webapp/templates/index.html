@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CardioSense — Heart Disease Risk Console</title>
+<meta name="description" content="An ensemble machine learning console that estimates heart disease risk from clinical vitals.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<div class="scanlines" aria-hidden="true"></div>
+
+<!-- ============================= HERO / MONITOR STRIP ============================= -->
+<header class="hero">
+  <canvas id="hero-ecg" class="hero-ecg-canvas" aria-hidden="true"></canvas>
+  <div class="hero-inner">
+    <div class="hero-top">
+      <div class="brand">
+        <span class="brand-mark">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 21s-7.5-4.6-10-9.1C.4 8.2 2.2 4.5 5.8 4c2.1-.3 4.1.8 5.2 2.5C12.1 4.8 14.1 3.7 16.2 4c3.6.5 5.4 4.2 3.8 7.9C17.5 16.4 12 21 12 21z"/>
+          </svg>
+        </span>
+        <span class="brand-name">CARDIO<span class="brand-accent">SENSE</span></span>
+      </div>
+      <div class="status-pill">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">MONITORING&nbsp;IDLE</span>
+      </div>
+    </div>
+    <h1 class="hero-title">Heart Disease Risk Console</h1>
+    <p class="hero-sub">An ensemble diagnostic model — <strong>XGBoost + Random Forest + Logistic Regression</strong>,
+      cross-validated and feature-selected on 303 clinical records — reading a live patient chart the way a bedside monitor reads a pulse.</p>
+  </div>
+</header>
+
+<!-- ============================= STAT STRIP ============================= -->
+<section class="stat-strip" aria-label="Model performance summary">
+  <div class="stat"><span class="stat-value">{{ '%.1f'|format(meta.test_metrics.roc_auc * 100) }}%</span><span class="stat-label">ROC&nbsp;AUC</span></div>
+  <div class="stat"><span class="stat-value">{{ '%.1f'|format(meta.test_metrics.accuracy * 100) }}%</span><span class="stat-label">Accuracy</span></div>
+  <div class="stat"><span class="stat-value">{{ '%.1f'|format(meta.test_metrics.recall * 100) }}%</span><span class="stat-label">Recall</span></div>
+  <div class="stat"><span class="stat-value">{{ '%.1f'|format(meta.test_metrics.precision * 100) }}%</span><span class="stat-label">Precision</span></div>
+  <div class="stat"><span class="stat-value">15</span><span class="stat-label">Features&nbsp;Used</span></div>
+  <div class="stat"><span class="stat-value">303</span><span class="stat-label">Training&nbsp;Patients</span></div>
+</section>
+
+<!-- ============================= MAIN CONSOLE ============================= -->
+<main class="console">
+
+  <!-- ---------------- LEFT: patient chart intake ---------------- -->
+  <section class="chart-panel" aria-label="Patient chart intake form">
+    <form id="vitals-form">
+
+      {% set groups = {
+        'patient':     {'label': 'Patient', 'ch': 'CH.01'},
+        'symptoms':    {'label': 'Symptoms', 'ch': 'CH.02'},
+        'vitals':      {'label': 'Vitals', 'ch': 'CH.03'},
+        'diagnostics': {'label': 'Diagnostics', 'ch': 'CH.04'}
+      } %}
+
+      {% for gkey, g in groups.items() %}
+      <fieldset class="channel">
+        <legend><span class="ch-tag">{{ g.ch }}</span><span class="ch-label">{{ g.label }}</span></legend>
+        <div class="channel-grid">
+          {% for f in inputs if f.group == gkey %}
+          <div class="field">
+            <label for="{{ f.name }}">{{ f.label }}{% if f.unit %} <span class="unit">({{ f.unit }})</span>{% endif %}</label>
+            {% if f.type == 'select' %}
+            <select id="{{ f.name }}" name="{{ f.name }}" data-field>
+              {% for opt in f.options %}
+              <option value="{{ opt.value }}" {% if opt.value == f.default %}selected{% endif %}>{{ opt.label }}</option>
+              {% endfor %}
+            </select>
+            {% else %}
+            <input type="number" id="{{ f.name }}" name="{{ f.name }}" data-field
+                   min="{{ f.min }}" max="{{ f.max }}" step="{{ f.step }}" value="{{ f.default }}" required>
+            {% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </fieldset>
+      {% endfor %}
+
+      <div class="form-actions">
+        <button type="submit" id="run-btn" class="run-btn">
+          <span class="run-btn-icon">⌁</span> Run Diagnostic
+        </button>
+        <button type="button" id="sample-btn" class="ghost-btn">Load sample chart</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ---------------- RIGHT: live monitor readout ---------------- -->
+  <aside class="monitor-panel" aria-label="Live risk readout">
+    <div class="monitor-frame">
+      <div class="monitor-header">
+        <span>PATIENT&nbsp;MONITOR</span>
+        <span id="monitor-clock">--:--:--</span>
+      </div>
+
+      <canvas id="readout-ecg" class="readout-ecg-canvas"></canvas>
+
+      <div class="readout-grid">
+        <div class="readout-block risk-block">
+          <span class="readout-label">Predicted Risk</span>
+          <div class="risk-value-row">
+            <span id="risk-value" class="risk-value">--</span>
+            <span class="risk-percent-sign">%</span>
+          </div>
+          <span id="risk-tag" class="risk-tag">AWAITING&nbsp;INPUT</span>
+        </div>
+        <div class="readout-block">
+          <span class="readout-label">Est. Heart Rate</span>
+          <span id="bpm-value" class="readout-value">-- <small>bpm</small></span>
+        </div>
+        <div class="readout-block">
+          <span class="readout-label">Model Verdict</span>
+          <span id="verdict-value" class="readout-value">--</span>
+        </div>
+      </div>
+
+      <div class="factors-block">
+        <span class="readout-label">Top Contributing Factors</span>
+        <div id="factors-list" class="factors-list">
+          <span class="factor-chip placeholder">Run a diagnostic to see drivers</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="disclaimer">⚠ Educational portfolio demo only — trained on the UCI Cleveland dataset (303 records).
+      Not a medical device. Not for clinical use or real diagnosis.</p>
+  </aside>
+
+</main>
+
+<!-- ============================= FOOTER ============================= -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <span class="brand-name small">CARDIO<span class="brand-accent">SENSE</span></span>
+      <p>{{ meta.algorithm }}, trained on {{ meta.trained_on }}. Feature set chosen via {{ meta.selection_method }}.</p>
+    </div>
+    <div class="footer-col footer-links">
+      <a href="{{ meta.author.github }}" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 .5C5.73.5.5 5.73.5 12c0 5.1 3.29 9.42 7.86 10.96.58.1.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.7-3.88-1.54-3.88-1.54-.53-1.33-1.29-1.69-1.29-1.69-1.05-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.29 1.19-3.1-.12-.29-.52-1.46.11-3.04 0 0 .97-.31 3.18 1.18a11.1 11.1 0 0 1 5.79 0c2.2-1.49 3.17-1.18 3.17-1.18.64 1.58.24 2.75.12 3.04.74.81 1.18 1.84 1.18 3.1 0 4.43-2.69 5.41-5.25 5.69.41.36.78 1.07.78 2.15 0 1.56-.01 2.81-.01 3.19 0 .31.21.67.8.56A10.51 10.51 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5Z"/></svg>
+        InfinitePraveen
+      </a>
+      <a href="{{ meta.author.linkedin }}" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.03-1.85-3.03-1.86 0-2.15 1.45-2.15 2.94v5.66H9.34V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.38-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28ZM5.34 7.43a2.07 2.07 0 1 1 0-4.13 2.07 2.07 0 0 1 0 4.13ZM7.12 20.45H3.56V9h3.56v11.45ZM22.22 0H1.78C.8 0 0 .78 0 1.75v20.5C0 23.22.8 24 1.78 24h20.44c.98 0 1.78-.78 1.78-1.75V1.75C24 .78 23.2 0 22.22 0Z"/></svg>
+        infinitepraveen
+      </a>
+    </div>
+  </div>
+</footer>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
