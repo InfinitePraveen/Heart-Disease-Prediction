@@ -1,0 +1,64 @@
+{
+  "model_name": "CardioSense Voting Ensemble",
+  "trained_on": "UCI Heart Disease (Cleveland) — 303 patients, 13 clinical features",
+  "algorithm": "Soft-voting ensemble: tuned XGBoost + Random Forest + Logistic Regression",
+  "selection_method": "RFECV (recursive feature elimination, 5-fold stratified CV, ROC-AUC)",
+  "test_metrics": {
+    "accuracy": 0.8197,
+    "precision": 0.775,
+    "recall": 0.9394,
+    "f1": 0.8493,
+    "roc_auc": 0.8939
+  },
+  "raw_inputs": [
+    {"name": "age", "label": "Age", "type": "number", "min": 18, "max": 100, "default": 54, "step": 1, "unit": "years", "group": "patient"},
+    {"name": "sex", "label": "Biological Sex", "type": "select", "default": 1, "group": "patient",
+      "options": [{"value": 1, "label": "Male"}, {"value": 0, "label": "Female"}]},
+    {"name": "cp", "label": "Chest Pain Type", "type": "select", "default": 0, "group": "symptoms",
+      "options": [
+        {"value": 0, "label": "Typical Angina"},
+        {"value": 1, "label": "Atypical Angina"},
+        {"value": 2, "label": "Non-Anginal Pain"},
+        {"value": 3, "label": "Asymptomatic"}
+      ]},
+    {"name": "exang", "label": "Exercise-Induced Angina", "type": "select", "default": 0, "group": "symptoms",
+      "options": [{"value": 0, "label": "No"}, {"value": 1, "label": "Yes"}]},
+    {"name": "trestbps", "label": "Resting Blood Pressure", "type": "number", "min": 80, "max": 220, "default": 130, "step": 1, "unit": "mm Hg", "group": "vitals"},
+    {"name": "chol", "label": "Serum Cholesterol", "type": "number", "min": 100, "max": 600, "default": 246, "step": 1, "unit": "mg/dl", "group": "vitals"},
+    {"name": "thalach", "label": "Max Heart Rate Achieved", "type": "number", "min": 60, "max": 220, "default": 150, "step": 1, "unit": "bpm", "group": "vitals"},
+    {"name": "oldpeak", "label": "ST Depression (Exercise vs Rest)", "type": "number", "min": 0, "max": 7, "default": 1.0, "step": 0.1, "unit": "mm", "group": "vitals"},
+    {"name": "restecg", "label": "Resting ECG Result", "type": "select", "default": 0, "group": "diagnostics",
+      "options": [
+        {"value": 0, "label": "Normal"},
+        {"value": 1, "label": "ST-T Wave Abnormality"},
+        {"value": 2, "label": "Left Ventricular Hypertrophy"}
+      ]},
+    {"name": "slope", "label": "Peak Exercise ST Slope", "type": "select", "default": 1, "group": "diagnostics",
+      "options": [
+        {"value": 0, "label": "Upsloping"},
+        {"value": 1, "label": "Flat"},
+        {"value": 2, "label": "Downsloping"}
+      ]},
+    {"name": "ca", "label": "Major Vessels Colored (Fluoroscopy)", "type": "select", "default": 0, "group": "diagnostics",
+      "options": [
+        {"value": 0, "label": "0 vessels"},
+        {"value": 1, "label": "1 vessel"},
+        {"value": 2, "label": "2 vessels"},
+        {"value": 3, "label": "3 vessels"},
+        {"value": 4, "label": "4 vessels"}
+      ]},
+    {"name": "thal", "label": "Thalassemia", "type": "select", "default": 2, "group": "diagnostics",
+      "options": [
+        {"value": 0, "label": "Unknown"},
+        {"value": 1, "label": "Normal"},
+        {"value": 2, "label": "Fixed Defect"},
+        {"value": 3, "label": "Reversible Defect"}
+      ]}
+  ],
+  "derived_features": ["hr_reserve", "age_chol_interaction", "high_risk_bp"],
+  "author": {
+    "name": "Praveen",
+    "github": "https://github.com/InfinitePraveen",
+    "linkedin": "https://www.linkedin.com/in/infinitepraveen/"
+  }
+}
